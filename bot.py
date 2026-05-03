@@ -8,7 +8,7 @@ from aiogram import F
 # Настройки
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 # Используем прямой URL API вашего Space
-API_URL = "https://koleslena-sanskrit-nlp-app.hf.space/run/predict"
+API_URL = "https://koleslena-sanskrit-nlp-app.hf.space/gradio_api/call/predict"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -25,26 +25,41 @@ async def handle_sanskrit(message: types.Message):
         async with httpx.AsyncClient(timeout=60.0) as client:
             # Формируем запрос в формате, который ожидает Gradio 6.0+
             payload = {
-                "data": [message.text]
+                "data": [message.text],
+                "api_name": "/predict"
             }
             
             response = await client.post(API_URL, json=payload)
             
             if response.status_code == 200:
                 data = response.json()
-                # Извлекаем результат из списка 'data' в ответе
-                # Обычно это [segmented, tagged]
-                result = data.get("data", [])
+                # В режиме /call/ ответ часто содержит event_id
+                event_id = data.get("event_id")
                 
-                if len(result) >= 2:
-                    segmented, tagged = result[0], result[1]
-                    res_text = (
-                        f"<b>Segmentation:</b>\n<code>{segmented}</code>\n\n"
-                        f"<b>POS Tagging:</b>\n<code>{tagged}</code>"
-                    )
-                    await wait_msg.edit_text(res_text, parse_mode="HTML")
+                if event_id:
+                    # Если получили ID события, нужно "дозабрать" результат
+                    result_url = f"https://koleslena-sanskrit-nlp-app.hf.space/gradio_api/call/predict/{event_id}"
+                    
+                    # Ждем секунду, пока модель думает
+                    await asyncio.sleep(1) 
+                    
+                    res_get = await client.get(result_url)
+                    # Gradio присылает результат в формате Server-Sent Events (строками)
+                    # Нам нужно вытащить данные из строки, начинающейся с 'data: '
+                    for line in res_get.text.split('\n'):
+                        if line.startswith('data: '):
+                            import json
+                            clean_data = json.loads(line[6:])
+                            segmented, tagged = clean_data[0], clean_data[1]
+                            
+                            res_text = (
+                                f"<b>Segmentation:</b>\n<code>{segmented}</code>\n\n"
+                                f"<b>POS Tagging:</b>\n<code>{tagged}</code>"
+                            )
+                            await wait_msg.edit_text(res_text, parse_mode="HTML")
+                            return
                 else:
-                    await wait_msg.edit_text("⚠️ Неожиданный формат ответа от модели.")
+                    await wait_msg.edit_text("⚠️ Ошибка: не удалось получить ID события.")
             else:
                 await wait_msg.edit_text(f"❌ Ошибка сервера HF: {response.status_code}")
                 
