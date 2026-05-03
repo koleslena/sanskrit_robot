@@ -1,9 +1,12 @@
 import os
 import asyncio
-import httpx  # Используем вместо gradio_client
+import httpx  
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
+
+load_dotenv()
 
 # Настройки
 TOKEN = os.getenv("TELEGRAM_TOKEN")
