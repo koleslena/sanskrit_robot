@@ -49,3 +49,5 @@ def get_db_file():
         writer = csv.writer(f)
         writer.writerow(column_names) # Заголовок
         writer.writerows(rows)        # Данные
+
+    return csv_path
