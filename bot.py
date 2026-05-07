@@ -13,7 +13,7 @@ load_dotenv()
 
 # Настройки
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 # Используем прямой URL API вашего Space
 API_URL = "https://koleslena-sanskrit-nlp-app.hf.space/gradio_api/call/predict"
 
@@ -36,7 +36,6 @@ async def cmd_start(message: types.Message):
 
 @dp.message(Command("export"))
 async def export_to_csv(message: types.Message):
-    print(message.from_user.id)
     if message.from_user.id == ADMIN_ID: 
         csv_path = get_db_file()
 
