@@ -1,6 +1,7 @@
 import os
 import asyncio
 import httpx
+import json
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -97,7 +98,7 @@ async def handle_sanskrit(message: types.Message):
                     # Нам нужно вытащить данные из строки, начинающейся с 'data: '
                     for line in res_get.text.split('\n'):
                         if line.startswith('data: '):
-                            import json
+                            
                             clean_data = json.loads(line[6:])
                             segmented, tagged = clean_data[0], clean_data[1]
                             
@@ -105,11 +106,14 @@ async def handle_sanskrit(message: types.Message):
                                 f"<b>Segmentation:</b>\n<code>{segmented}</code>\n\n"
                                 f"<b>POS Tagging:</b>\n<code>{tagged}</code>"
                             )
+                            
+                            await wait_msg.delete() # Удаляем "Анализирую..."
                             # Отправляем ответ с кнопкой ошибки
-                            await wait_msg.edit_text(
+                            await message.answer(   # Отправляем результат именно как ОТВЕТ на вопрос
                                 res_text, 
                                 parse_mode="HTML", 
-                                reply_markup=get_error_keyboard()
+                                reply_markup=get_error_keyboard(),
+                                reply_to_message_id=message.message_id # Явная привязка
                             )
                             return
                 else:
