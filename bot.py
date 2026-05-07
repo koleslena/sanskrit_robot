@@ -36,7 +36,7 @@ async def cmd_start(message: types.Message):
 
 @dp.message(Command("export"))
 async def export_to_csv(message: types.Message):
-    # Замени на свой Telegram ID для безопасности!
+    print(message.from_user.id)
     if message.from_user.id == ADMIN_ID: 
         csv_path = get_db_file()
 
