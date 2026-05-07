@@ -106,7 +106,12 @@ async def handle_sanskrit(message: types.Message):
                                 f"<b>Segmentation:</b>\n<code>{segmented}</code>\n\n"
                                 f"<b>POS Tagging:</b>\n<code>{tagged}</code>"
                             )
-                            await wait_msg.edit_text(res_text, parse_mode="HTML")
+                            # Отправляем ответ с кнопкой ошибки
+                            await wait_msg.edit_text(
+                                res_text, 
+                                parse_mode="HTML", 
+                                reply_markup=get_error_keyboard()
+                            )
                             return
                 else:
                     await wait_msg.edit_text("⚠️ Ошибка: не удалось получить ID события.")
