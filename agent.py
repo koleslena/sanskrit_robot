@@ -13,6 +13,34 @@ DM_API_URL = "https://dharmamitra.org/bff/api/translation"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def wait_for_table():
+    """Ожидание появления таблицы в базе данных."""
+    logging.info("Проверка готовности таблицы 'errors'...")
+    while True:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            # Проверяем, существует ли таблица
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'errors'
+                );
+            """)
+            exists = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+
+            if exists:
+                logging.info("Таблица 'errors' найдена! Агент приступает к работе.")
+                break
+            else:
+                logging.info("Таблица 'errors' еще не создана. Ждем 10 секунд...")
+        except Exception as e:
+            logging.error(f"База данных еще недоступна: {e}. Ждем...")
+        
+        time.sleep(10)
+
 def get_dm_response(query):
     """Отправляет запрос к новому API Dharmamitra и собирает текстовые дельты."""
     payload = {
@@ -89,6 +117,10 @@ def process_pending_errors():
 
 if __name__ == "__main__":
     logging.info("Агент запущен (Postgres Mode)...")
+
+    # Сначала ждем, пока таблица появится в базе
+    wait_for_table()
+
     while True:
         process_pending_errors()
         time.sleep(300)

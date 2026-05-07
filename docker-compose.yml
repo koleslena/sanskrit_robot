@@ -16,6 +16,21 @@ services:
     networks:
       - bot_network
 
+  # Агент для обработки ошибок через Dharmamitra
+  feedback_agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: sanskrit_feedback_agent
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - bot_network
+
   # База данных PostgreSQL
   db:
     image: postgres:15-alpine
