@@ -2,14 +2,17 @@ import psycopg2
 import os
 import csv
 
+# Настройки
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST", "feedback_db"), # Имя сервиса базы в Docker
+    "database": os.getenv("DB_NAME", "feedback_db"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "password"),
+    "port": os.getenv("DB_PORT", "5432")
+}
+
 def get_db_connection():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "db"), 
-        database=os.getenv("DB_NAME", "feedback_db"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "password"),
-        port=os.getenv("DB_PORT", "5432")
-    )
+    return psycopg2.connect(**DB_CONFIG)
 
 def init_db():
     conn = get_db_connection()

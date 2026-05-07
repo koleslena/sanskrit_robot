@@ -1,67 +1,94 @@
-import sqlite3
+import os
 import time
+import json
+import httpx
+import psycopg2
 import logging
-# from dharmamitra_sanskrit_grammar import DharmamitraSanskritProcessor
+from dotenv import load_dotenv
+from responces import get_db_connection
 
-# Настройка логирования
+load_dotenv()
+
+DM_API_URL = "https://dharmamitra.org/bff/api/translation"
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def process_pending_errors():
-    # 1. Подключаемся к базе
-    conn = sqlite3.connect("feedback.db")
-    cursor = conn.cursor()
-
+def get_dm_response(query):
+    """Отправляет запрос к новому API Dharmamitra и собирает текстовые дельты."""
+    payload = {
+        "input_sentence": query,
+        "input_encoding": "auto",
+        "target_lang": "english",
+        "do_grammar": False,
+        "mode": "explain-grammar",
+        "messages": [
+            {
+                "parts": [{"type": "text", "text": query}],
+                "role": "user"
+            }
+        ]
+    }
+    
+    full_text = []
     try:
-        # 2. Ищем записи, которые еще не обработаны агентом
+        # Используем тайм-аут побольше, так как генерация текста может занять время
+        with httpx.Client(timeout=60.0) as client:
+            with client.stream("POST", DM_API_URL, json=payload) as response:
+                if response.status_code != 200:
+                    return f"Error DM API: {response.status_code}"
+
+                for line in response.iter_lines():
+                    if line.startswith("data: "):
+                        content = line[6:]
+                        if content == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(content)
+                            # Нас интересуют только кусочки текста (delta)
+                            if data.get("type") == "text-delta":
+                                full_text.append(data.get("delta", ""))
+                        except json.JSONDecodeError:
+                            continue
+                            
+        return "".join(full_text) if full_text else "No explanation generated"
+    except Exception as e:
+        return f"Connection error: {str(e)}"
+
+def process_pending_errors():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Ищем записи, где еще нет ответа от Дхармамитры
         cursor.execute("SELECT id, user_query FROM errors WHERE dharmamitra_response IS NULL")
         rows = cursor.fetchall()
 
         if not rows:
-            logging.info("Нет новых ошибок для обработки.")
+            logging.info("Новых ошибок нет.")
             return
 
-        logging.info(f"Найдено {len(rows)} новых записей для анализа.")
+        for row_id, query in rows:
+            logging.info(f"Анализируем запрос {row_id}: {query}")
+            
+            # Получаем ответ от нового API
+            dm_explanation = get_dm_response(query)
+            
+            # Сохраняем результат
+            cursor.execute(
+                "UPDATE errors SET dharmamitra_response = %s WHERE id = %s",
+                (dm_explanation, row_id)
+            )
+            conn.commit()
+            logging.info(f"ID {row_id} обновлен.")
 
-        # Инициализируем процессор Дхармамитры
-        # processor = DharmamitraSanskritProcessor()
-
-        # for row_id, query in rows:
-        #     try:
-        #         logging.info(f"Обработка запроса ID {row_id}: {query}")
-                
-        #         # 3. Запрос к Dharmamitra API
-        #         # Используем самый подробный режим, чтобы иметь максимум данных для сравнения
-        #         results = processor.process_batch(
-        #             [query],
-        #             mode="unsandhied-lemma-morphosyntax",
-        #             human_readable_tags=True
-        #         )
-
-        #         # Преобразуем результат в строку (или JSON), чтобы сохранить в БД
-        #         # Берём первый результат, так как мы передавали список из одного предложения
-        #         dm_output = str(results[0]) if results else "No result from Dharmamitra"
-
-        #         # 4. Обновляем базу данных
-        #         cursor.execute(
-        #             "UPDATE errors SET dharmamitra_response = ? WHERE id = ?",
-        #             (dm_output, row_id)
-        #         )
-        #         conn.commit()
-        #         logging.info(f"Запись ID {row_id} успешно обновлена.")
-
-        #     except Exception as e:
-        #         logging.error(f"Ошибка при обработке ID {row_id}: {e}")
-        #         continue
-
-    except Exception as e:
-        logging.error(f"Ошибка базы данных: {e}")
-    finally:
+        cursor.close()
         conn.close()
+    except Exception as e:
+        logging.error(f"Ошибка в работе агента: {e}")
 
 if __name__ == "__main__":
-    logging.info("Агент запущен...")
+    logging.info("Агент запущен (Postgres Mode)...")
     while True:
         process_pending_errors()
-        # Проверяем базу каждые 5 минут (300 секунд)
-        logging.info("Ожидание 5 минут перед следующей проверкой...")
         time.sleep(300)
